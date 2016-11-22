@@ -3,7 +3,7 @@
 ## Notes: Guild Roster Upgrades
 ## Author: Sinderion@Shadow Council
 ## Version: 1.1
-## SavedVariables: LRSETTINGS
+## SavedVariables: LRSETTINGS, LRSNAPSHOT
 ## LoadOnDemand: 1
 ## LoadWith: Blizzard_GuildUI
 
