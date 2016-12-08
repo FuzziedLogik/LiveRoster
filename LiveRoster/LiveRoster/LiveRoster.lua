@@ -45,34 +45,36 @@ LR_DIRTY = nil;
 function InAltGuild()
 
         local GuildName,_ = GetGuildInfo("Player")
-
+        local Alty = 0;
         -- Quick hack to detect our alt guild. Only runs the first time update roster is run thanks to "LiveRosterCreated" variable.
         if GuildName == "Bastions of Twilight" then
-            return 1;
+            Alty = 1;
         else 
-            return nil;
+            Alty = nil;
         end
-
+        return Alty;
 end
 
 
 function LRCreateRoster()
 	--Roster = { }, 
+    local i = 1;
     if LR_USE_SNAPSHOT > 0 and LRSNAPSHOT ~= nil and InAltGuild() then
        
         LRE("Snapshot found, using.");
         -- Good a place as any, being a single time use spot, to do initial unpacking of LRSNAPSHOT. i.e. making an indexed list pointing to the name indexes.
-        local i = 1
+        
    
 
         for sName,vMain in pairs(LRSNAPSHOT.Toons) do
             LR_SnapshotIndex[i] = sName;
             i = i + 1;
-       end
+        end
 
 
+    end
 
-    else
+    
 
 	    LiveRoster.Players = { }; -- mostly links to mains, indexed by names
 	    LiveRoster.Toons = { };
@@ -94,7 +96,7 @@ function LRCreateRoster()
 	    LiveRoster.Roster.Promotions = { };
 	    LiveRoster.Roster.NameIndex = { };
 	    LiveRosterCreated = true;
-    end
+        LiveRoster.MainGuildCount = i-1;
 end
    
 local myQuickInsert = table.insert;
@@ -1573,7 +1575,10 @@ function ShowRosterTooltip(self)
 					
 						tToon = iAlt;
 						local classColor = LIVEROSTER_CLASS_COLORS[tToon.Class];
-						local _, _, _, _, _, _, _, _,Online  = GetGuildRosterInfo(tToon.Index);
+						local sName, _, _, _, _, _, _, _,Online  = GetGuildRosterInfo(tToon.Index);
+
+                        if sName == nil then Online = false end -- If we're using snapshot, this is easy hack to clean up tooltip XD
+
 						sCurrentRank = tToon.RankIndex
 						
 -- Alt list
@@ -1905,10 +1910,15 @@ function LiveRoster_DoExtensionButtons(myToon)
 					GuildRosterButton_SetStringText(ExtensionButton.officernote, tToon.OfficerNote, true);
 					local online;
 					--\124TInterface\\Common\\ReputationStar:16\124t
-					if not tToon.Online then
+
+                    -- Using the "Online" field to indicate in the mini roster that this is a character from the main guild. Otherwise just saying online or not :D
+                   if tToon.IsSnapshot then
+					    GuildRosterButton_SetStringText(ExtensionButton.string3, tToon.ShortName, true, tToon.ClassFileName)
+						GuildRosterButton_SetStringText(ExtensionButton.offline, "\124cff9d9d9d".. "Main Guild".."\124r", true);
+					elseif not tToon.Online then
 					    GuildRosterButton_SetStringText(ExtensionButton.string3, tToon.ShortName, true, tToon.ClassFileName)
 						GuildRosterButton_SetStringText(ExtensionButton.offline, "\124cff9d9d9d".. RecentTimeDate( 0, tToon.OfflineMonths, tToon.OfflineDays, 0 ).."\124r", true);
-					else
+                    else
 						GuildRosterButton_SetStringText(ExtensionButton.string3, "\124TInterface\\Common\\ReputationStar:15:15:0:-4:32:32:0:16:0:16\124t "..tToon.ShortName, true, tToon.ClassFileName)
 						GuildRosterButton_SetStringText(ExtensionButton.offline, "\124cFFFFD700Online\124r", true);
 					end
@@ -2316,9 +2326,9 @@ function LiveRoster:UpdateRoster(iStart, iEnd, sOutputChannel)
 	LRE("Updating roster. Hope it's a good time.", 1)
    self = LiveRoster;
 	self.Loaded = 0;  -- Some things are best not done during a roster update.
---Stat keeping
-	local Matched_count = 0;
-	local Player_count = 0;
+--Stat keeping for debug
+	--local Matched_count = 0;
+	--local Player_count = 0;
 
 	 
 
@@ -2336,22 +2346,17 @@ function LiveRoster:UpdateRoster(iStart, iEnd, sOutputChannel)
    local iCurrentDay = tonumber(date("%d"));
    
    
-   local iFoundOne =  0; -- Keeps track of first time action is required, time to fire up the engines if this hits 1
-   local iCountNoobs = 0; -- Temporary, but this is where count trackers go.
+   --local iFoundOne =  0; -- Keeps track of first time action is required, time to fire up the engines if this hits 1
+   --local iCountNoobs = 0; -- Temporary, but this is where count trackers go.
    
    local iToday = (tonumber(date("%Y"))-2000-5)*365.25+tonumber(date("%j"))+38; -- %j is day of the year, so we can skip the month and day calculations if using date() :D
 
    iStart = iStart or 1;
    iEnd = iEnd or iTotalMembers;
-
-   -- SNAPSHOT bits.
-   if LRSNAPSHOT and LRSNAPSHOT.Toons then
-     iMainGuildCount = #LRSNAPSHOT.Toons 
-   end
-
-   if LR_USE_SNAPSHOT > 0 and InAltGuild() and LRSNAPSHOT then
-      iEnd = iEnd + iMainGuildCount
-   end
+   
+   --For use with snapshot, but if you aren't in alt guild, MainGuildCount will be zero anyways, so can run this without any expensive checking.
+   iEnd = iEnd + LiveRoster.MainGuildCount
+   
 
    sOutputChannel = sOutputChannel or "SAY"
    LiveRoster.OutputChannel = sOutputChannel;
@@ -2388,31 +2393,35 @@ function LiveRoster:UpdateRoster(iStart, iEnd, sOutputChannel)
    if not LRSNAPSHOT then LRSNAPSHOT ={ Toons = {} } end
    if not LRSNAPSHOT.Toons then LRSNAPSHOT.Toons = { } end
 
-
+   if bInAltGuild and LRSNAPSHOT then
+        LRE("Total number of records to scan = "..iEnd);
+   end
 
    -- Sort out alts and mains, then plug together if possible in next loop
    for i=iStart, iEnd do
       
       local sName,sRank,iRank,iLevel,sClass,_,sNote,sOfficerNote, Online,_, classFileName
-
+      local bIsSnapshot = nil; --
 	  -- SNAPSHOT bits. feed in snapshot data until we churn through it all.
       
       if bInAltGuild and LRSNAPSHOT and i > iTotalMembers then
 
-       local tToon = LRSNAPSHOT.Toons[LR_SnapshotIndex[i-iTotalMembers]]
-        -- feed in snapshot data, because we've still got some.
-        sName = LR_SnapshotIndex[i-iTotalMembers]
-        iRank = tToon.iRank
-        sRank = GuildControlGetRankName(iRank);
-        iLevel = 0
-        sClass = 10
-        sNote = tToon.Note
-        sOfficerNote = tToon.OfficerNote
-        Online = 0
-        classFileName = "WARLOCK"
+         local tToon = LRSNAPSHOT.Toons[LR_SnapshotIndex[i-iTotalMembers]]
+            -- feed in snapshot data, because we've still got some.
+            sName = LR_SnapshotIndex[i-iTotalMembers]
+            iRank = tToon.RankIndex
+            sRank = GuildControlGetRankName(iRank);
+            iLevel = tToon.Level
+            sClass = tToon.Class
+            sNote = tToon.Note
+            sOfficerNote = tToon.OfficerNote
+            Online = nil
+            classFileName = tToon.classFileName;
+            bIsSnapshot = 1; -- For use in other places. This record is archived from a visit to the main guild.
+        
 
       else
-        sName,sRank,iRank,iLevel,sClass,_,sNote,sOfficerNote, Online,_, classFileName = GetGuildRosterInfo(i);
+          sName,sRank,iRank,iLevel,sClass,_,sNote,sOfficerNote, Online,_, classFileName = GetGuildRosterInfo(i);
       end
 
       local tToon, trash;
@@ -2439,6 +2448,7 @@ function LiveRoster:UpdateRoster(iStart, iEnd, sOutputChannel)
 			tToon.ClassFileName = classFileName;
 			tToon.NeedsPromotion = 0;
 			tToon.Alts = nil;
+            tToon.IsSnapshot = bIsSnapshot;
 			
 	  else
 		self.Toons[sName] = {
@@ -2458,30 +2468,45 @@ function LiveRoster:UpdateRoster(iStart, iEnd, sOutputChannel)
 			ShortName = sShortName,
 			Online = Online,
 			ClassFileName = classFileName,
-			Alts = nil
+			Alts = nil,
+            IsSnapshot = bIsSnapshot
 		}
 	  end
 
 
-      -- Pack up relevant LRSNAPSHOT data, overwriting as necessary w/ newest info.
+      -- Pack up relevant LRSNAPSHOT data if we're in the main guild, overwriting as necessary w/ newest info.
 
-
+      if not bInAltGuild then
   	   LRSNAPSHOT.Toons[sName] = {
             Main = nil,
+            Class = sClass,
+            Level = iLevel,
             RankIndex = iRank,
             Note = sNote,
-            OfficerNote = sOfficerNote
+            OfficerNote = sOfficerNote,
+            classFileName = classFileName
        }
-
+       end
 		
+     -- Utility lists --
+
 	  tToon = self.Toons[sName];
 	  self.Roster[i] = tToon;
 	  LiveRoster.Roster.NameIndex[sName] = i; --for easy reverse lookup of index :D
+
+	  sShortName = myQuickUpper(sShortName);		         --
+		                                                     --  For easy look up by short name when reading alt comments     
+      if not self.ShortNames then self.ShortNames = {} end   --       e.g. "Sinderion Alt" Even though Sinderion's name is Sinderion-ShadowCouncil
+	  self.ShortNames[sShortName] = self.Toons[sName]		 --
 	  
+
+      -- Time in guild and time last online calculation. The basis of TC automatic promotion calculations. --
+
       trash, tToon["OfflineMonths"], tToon["OfflineDays"] = GetGuildRosterLastOnline(i); 
 		
 	  tToon.OfflineMonths = tToon.OfflineMonths or 0;
 	  
+
       local iMonth, iDay, iYear =  LiveRoster.GetTCDate(tToon.Note);
 	  
 	  --try again for Kouko lol
@@ -2513,12 +2538,14 @@ function LiveRoster:UpdateRoster(iStart, iEnd, sOutputChannel)
 	  
 	  local iPendingPromotion = 0;
       
-      if iMonth and iDay and iYear then -- That means it's a main
+      if iMonth and iDay and iYear then -- That means it's a main. If we're in the alt guild, by definition, it's not a main.
       
-
+        
         -- Indicate this is a main in the snapshot.  nil = error, 1 = confirmed main, string = an alt of the named main contained in the string.
-        LRSNAPSHOT.Toons[sName].Main = 1
-
+        if not bInAltGuild then
+            tSnapshotToon = LRSNAPSHOT.Toons[sName]
+            tSnapshotToon.Main = 1
+        end
 
 		if not LiveRoster.Roster.Mains then
 			LiveRoster.Roster.Mains = { }
@@ -2536,14 +2563,11 @@ function LiveRoster:UpdateRoster(iStart, iEnd, sOutputChannel)
 		end
 			
 			--Stats keeping, should count as a 'match' if it's a main.	
-			Matched_count = Matched_count + 1;
+			--Matched_count = Matched_count + 1;
 		--This is a main, so needs to be in the ShortName's index.
 		
 		--Uppercase Short name since it should be case insensitive
-		sShortName = myQuickUpper(sShortName);		
-		
-		if not self.ShortNames then self.ShortNames = {} end
-		self.ShortNames[sShortName] = self.Toons[sName]		
+
 		
 			--store this toon's place in the .Main list in it's "isMain" value.
 			tToon.isMain = iMainIndex;
@@ -2684,7 +2708,7 @@ local myQuickUpper = string.upper;
 		
 		-- Find Mains with table. Main's short names were stored as they were found.
 		if self.ShortNames[sMainName] then
-			Matched_count = Matched_count + 1;
+			--Matched_count = Matched_count + 1;
 			myMain = self.ShortNames[sMainName];
 			if not myMain.Alts then myMain.Alts = { } end
 			myQuickInsert(myMain.Alts, iAlt)
@@ -2693,11 +2717,11 @@ local myQuickUpper = string.upper;
 			--Now if you look this character up as a player, the main will be returned, as intended.
 			LiveRoster.Players[iAlt.Name] = LiveRoster.Players[myMain.Name]
             
-            -- Pack into LRSNAPSHOT as an alt with a main.
-            LRSNAPSHOT.Toons[iAlt.Name] = {
-            Main = myMain.Name,
-            RankIndex = iAlt.iRank
-            }
+            -- Pack into LRSNAPSHOT as an alt with a main. Only write to snapshot if we're in main guild.
+            if not bInAltGuild then 
+            LRSNAPSHOT.Toons[iAlt.Name].Main = myMain.Name
+        
+            end
 
 			iAlt.IsMain = 0;
 			iAlt.ErrorStatus = 0;
@@ -2801,7 +2825,7 @@ function LRMEM()
 		LRLASTMEM = myMem;
 		--LRE("Orphan Count: ".. #LiveRoster.Roster-Matched_count.." Mains: "..#LiveRoster.Roster.Mains.." Total: "..Player_count);
 		--LRE("Reused toon slots: "..LiveRoster_Reused_Slots);
-		Matched_count = 0;
+		--Matched_count = 0;
 
 	  
 
