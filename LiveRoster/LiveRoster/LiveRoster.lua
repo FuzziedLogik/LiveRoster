@@ -2395,9 +2395,9 @@ function LiveRoster:UpdateRoster(iStart, iEnd, sOutputChannel)
    if not LRSNAPSHOT then LRSNAPSHOT ={ Toons = {} } end
    if not LRSNAPSHOT.Toons then LRSNAPSHOT.Toons = { } end
 
-   if bInAltGuild and LRSNAPSHOT then
-        LRE("Total number of records to scan = "..iEnd);
-   end
+   --if bInAltGuild and LRSNAPSHOT then
+        -- LRE("Total number of records to scan = "..iEnd);
+   --end
 
    -- Sort out alts and mains, then plug together if possible in next loop
    for i=iStart, iEnd do
