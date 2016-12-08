@@ -1,5 +1,6 @@
 FrameXML_Debug(enable)
 -- TODO: RAID TEAMS/ROSTER
+-- Todo: Get rid of warning about mains in loop.  Clicking main from main guild while in alt guild, should copy the main's name.
 -- Achievement style toasts for invites? other things?
 
 -- Debug
@@ -1045,6 +1046,7 @@ function ExtensionButton_OnClick(self, button)
 				LiveRoster.ExtensionButtons.AddAltButton:UnlockHighlight(); -- just in case ...
 			end
 		end
+       
 		LiveRoster.ExtensionSelection = self.LongName;
 				LiveRoster.Loaded = 0; -- suspend operations until update roster reloads :D
 		LiveRoster.UpdateRoster()
